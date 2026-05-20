@@ -98,19 +98,14 @@ BANNER
 echo -e "${RESET}"
 hr
 
-echo -e "  This script will automatically install:"
-echo -e "  ${DIM}• PHP 8.3, Composer, Node 20, npm${RESET}"
-echo -e "  ${DIM}• MySQL 8, Redis, Nginx${RESET}"
-echo -e "  ${DIM}• Clone & configure Kroxy Panel${RESET}"
-echo -e "  ${DIM}• Run migrations, build frontend${RESET}"
-echo -e "  ${DIM}• Create your admin account${RESET}"
+echo -e "  This script will automatically install Kroxy Panel."
 hr
 echo
 read -rp "  Press ENTER to begin, or Ctrl+C to cancel..."
 
 # ── collect configuration ─────────────────────────────────────
 echo
-echo -e "${BOLD}Just a few questions — everything else is automatic.${RESET}"
+echo -e "${BOLD}Configuration${RESET}"
 echo
 
 ask APP_NAME  "Panel name" "Kroxy"
@@ -132,24 +127,25 @@ while [[ "$ADMIN_PASS" != "$ADMIN_PASS2" ]]; do
     ask_secret ADMIN_PASS2 "Confirm password"
 done
 
-# Auto-generate DB credentials
+# Auto-generate credentials
 DB_NAME="kroxy"
 DB_USER="kroxy"
 DB_PASS="$(tr -dc 'A-Za-z0-9!#%^' </dev/urandom | head -c 24)"
 REDIS_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
 
-# ── Review ────────────────────────────────────────────────────
+# ── Confirmation AFTER admin info ─────────────────────────────
 echo
 hr
-echo -e "  ${YELLOW}Ready to install — review:${RESET}"
+echo -e "  ${YELLOW}Installation Summary${RESET}"
 echo -e "  Panel name : ${APP_NAME}"
 echo -e "  Panel URL  : ${APP_URL}"
 echo -e "  Timezone   : ${APP_TZ}"
 echo -e "  Admin      : ${ADMIN_FIRST} ${ADMIN_LAST} <${ADMIN_EMAIL}> (${ADMIN_USERNAME})"
-echo -e "  ${DIM}Database & Redis credentials will be generated automatically.${RESET}"
+echo -e "  ${DIM}Database and Redis credentials will be auto-generated.${RESET}"
 hr
+echo
 
-read -rp "  Looks good? Press ENTER to start installation, or Ctrl+C to abort..."
+read -rp "  All information correct? Press ENTER to start installation or Ctrl+C to cancel..."
 echo
 
 # ── 1 · system update ─────────────────────────────────────────
@@ -186,18 +182,17 @@ success "PHP 8.3 installed ($(php8.3 -r 'echo PHP_VERSION;'))"
 # ── 4 · Composer ──────────────────────────────────────────────
 step "Installing Composer"
 curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --quiet
-success "Composer installed ($(composer --version --no-ansi 2>/dev/null | head -1))"
+success "Composer installed"
 
 # ── 5 · Node 20 ───────────────────────────────────────────────
 step "Installing Node.js 20 and npm"
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
 apt-get install -y -qq nodejs
-success "Node installed ($(node --version)) · npm $(npm --version)"
+success "Node.js 20 installed"
 
 # ── 6 · MySQL 8 ───────────────────────────────────────────────
 step "Installing and configuring MySQL 8"
 apt-get install -y -qq mysql-server
-
 systemctl enable mysql >/dev/null 2>&1
 systemctl start mysql
 
@@ -212,16 +207,14 @@ CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;
 MYSQL_SETUP
-success "MySQL 8 installed — database '${DB_NAME}' created"
+success "MySQL 8 installed"
 
 # ── 7 · Redis ─────────────────────────────────────────────────
 step "Installing and configuring Redis"
 apt-get install -y -qq redis-server
-
 sed -i "s/^# requirepass .*/requirepass ${REDIS_PASS}/" /etc/redis/redis.conf
 sed -i "s/^requirepass .*/requirepass ${REDIS_PASS}/" /etc/redis/redis.conf
 sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf
-
 systemctl enable redis-server >/dev/null 2>&1
 systemctl restart redis-server
 success "Redis installed and secured"
@@ -241,8 +234,6 @@ server {
     server_name ${APP_DOMAIN};
     root /var/www/kroxy/public;
     index index.php;
-    access_log /var/log/nginx/kroxy_access.log;
-    error_log  /var/log/nginx/kroxy_error.log warn;
 
     location / {
         try_files \$uri \$uri/ /index.php?\$query_string;
@@ -266,30 +257,28 @@ NGINX_CONF
 
 ln -sf /etc/nginx/sites-available/kroxy /etc/nginx/sites-enabled/kroxy
 rm -f /etc/nginx/sites-enabled/default
-
 nginx -t >/dev/null 2>&1 && systemctl restart nginx
 systemctl enable nginx >/dev/null 2>&1
-success "Nginx configured for ${APP_DOMAIN}"
+success "Nginx configured"
 
-# ── 9 · clone repo ────────────────────────────────────────────
+# ── 9 · Clone ─────────────────────────────────────────────────
 step "Cloning Kroxy Panel"
 INSTALL_DIR="/var/www/kroxy"
 if [[ -d "$INSTALL_DIR" ]]; then
-    warn "Directory $INSTALL_DIR already exists — removing it."
+    warn "Directory exists, removing..."
     rm -rf "$INSTALL_DIR"
 fi
-
 git clone https://github.com/ElXora/kroxy-new "$INSTALL_DIR" --quiet
 cd "$INSTALL_DIR"
-success "Cloned to $INSTALL_DIR"
+success "Repository cloned"
 
-# ── 10 · PHP dependencies ─────────────────────────────────────
+# ── 10 · Composer ─────────────────────────────────────────────
 step "Installing PHP dependencies"
 composer install --no-dev --optimize-autoloader --no-interaction --quiet
-success "Composer packages installed"
+success "Composer dependencies installed"
 
 # ── 11 · .env ─────────────────────────────────────────────────
-step "Writing .env configuration"
+step "Configuring .env file"
 cp .env.example .env
 
 env_set APP_NAME        "${APP_NAME}"
@@ -314,24 +303,23 @@ env_set MAIL_FROM_ADDRESS "no-reply@${APP_DOMAIN}"
 env_set MAIL_FROM_NAME  "${APP_NAME}"
 
 php artisan key:generate --force --quiet
-success ".env written and app key generated"
+success ".env configured"
 
-# ── 12 · permissions + migrate ────────────────────────────────
+# ── 12 · Migrate ──────────────────────────────────────────────
 step "Setting permissions and running migrations"
 chown -R www-data:www-data "$INSTALL_DIR"
 chmod -R 755 storage bootstrap/cache
-
 php artisan migrate --seed --force --quiet
-success "Database migrated and seeded"
+success "Migrations completed"
 
-# ── 13 · frontend build ───────────────────────────────────────
-step "Installing Node dependencies and building frontend"
+# ── 13 · Frontend ─────────────────────────────────────────────
+step "Building frontend"
 npm install --silent
 npm run build --silent
-success "Frontend assets built"
+success "Frontend built"
 
-# ── 14 · admin user + queue worker ───────────────────────────
-step "Creating admin user and queue worker service"
+# ── 14 · Admin + Queue ────────────────────────────────────────
+step "Creating admin user"
 php artisan p:user:make \
     --email="$ADMIN_EMAIL" \
     --username="$ADMIN_USERNAME" \
@@ -340,7 +328,7 @@ php artisan p:user:make \
     --password="$ADMIN_PASS" \
     --admin=1
 
-# Queue worker
+# Queue service
 cat > /etc/systemd/system/kroxy-queue.service << SERVICE
 [Unit]
 Description=Kroxy Panel Queue Worker
@@ -358,32 +346,20 @@ WantedBy=multi-user.target
 SERVICE
 
 systemctl daemon-reload
-systemctl enable kroxy-queue.service >/dev/null 2>&1
-systemctl start kroxy-queue.service
-success "Queue worker service started"
+systemctl enable --now kroxy-queue.service >/dev/null 2>&1
+success "Admin user created & queue worker started"
 
-# ── done ──────────────────────────────────────────────────────
+# ── Finish ────────────────────────────────────────────────────
 echo
 echo -e "${WHITE}╔════════════════════════════════════════════════════╗${RESET}"
 echo -e "${WHITE}║     Kroxy Panel installed successfully! 🎉        ║${RESET}"
 echo -e "${WHITE}╚════════════════════════════════════════════════════╝${RESET}"
 echo
-echo -e "  ${BOLD}Panel URL    :${RESET} ${APP_URL}"
-echo -e "  ${BOLD}Admin login  :${RESET} ${ADMIN_EMAIL}"
-echo -e "  ${BOLD}Admin user   :${RESET} ${ADMIN_USERNAME}"
-echo -e "  ${BOLD}Installed to :${RESET} ${INSTALL_DIR}"
+echo -e "  ${BOLD}Panel URL   :${RESET} ${APP_URL}"
+echo -e "  ${BOLD}Admin Email :${RESET} ${ADMIN_EMAIL}"
+echo -e "  ${BOLD}Admin User  :${RESET} ${ADMIN_USERNAME}"
 echo
-echo -e "  ${DIM}Services running:${RESET}"
-echo -e "  ${DIM}• Nginx      (web server)${RESET}"
-echo -e "  ${DIM}• PHP 8.3    (php-fpm)${RESET}"
-echo -e "  ${DIM}• MySQL 8    (database)${RESET}"
-echo -e "  ${DIM}• Redis      (cache/sessions)${RESET}"
-echo -e "  ${DIM}• kroxy-queue (background jobs)${RESET}"
-echo
-echo -e "  ${YELLOW}Next steps:${RESET}"
-echo -e "  ${DIM}• Point your domain DNS to this server${RESET}"
-echo -e "  ${DIM}• Run: certbot --nginx -d ${APP_DOMAIN} (for HTTPS)${RESET}"
-echo -e "  ${DIM}• Install Wings on your game nodes${RESET}"
+echo -e "  ${YELLOW}Next:${RESET} Run ${BOLD}certbot --nginx -d ${APP_DOMAIN}${RESET} for HTTPS"
 echo
 
 exit 0
