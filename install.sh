@@ -385,3 +385,5 @@ echo -e "  ${DIM}• Point your domain DNS to this server${RESET}"
 echo -e "  ${DIM}• Run: certbot --nginx -d ${APP_DOMAIN} (for HTTPS)${RESET}"
 echo -e "  ${DIM}• Install Wings on your game nodes${RESET}"
 echo
+
+exit 0
