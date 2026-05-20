@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================
-# Kroxy Panel — Full Auto Installer
-# https://github.com/ElXora/kroxy-new
+#  Kroxy Panel — One-Command Installer (Simplified)
+#  https://github.com/ElXora/kroxy-new
 # =============================================================
 set -euo pipefail
 
-# ── colours ───────────────────────────────────────────────────
+# ── colours ──────────────────────────────────────────────────
 BOLD='\033[1m'
 DIM='\033[2m'
 WHITE='\033[1;37m'
@@ -16,30 +16,29 @@ CYAN='\033[0;36m'
 RESET='\033[0m'
 
 STEP=0
-TOTAL=14
+TOTAL=9  # Reduced because we removed 3 sections
 
 # ── helpers ───────────────────────────────────────────────────
 step() {
-    STEP=$((STEP+1))
-    echo -e "\n  ${WHITE}[${STEP}/${TOTAL}]${RESET} ${BOLD}${1}${RESET}"
+    STEP=$((STEP + 1))
+    echo -e "\n${WHITE}[${STEP}/${TOTAL}]${RESET} ${BOLD}${1}${RESET}"
 }
 
 info()    { echo -e "  ${DIM}→ ${1}${RESET}"; }
 success() { echo -e "  ${GREEN}✓ ${1}${RESET}"; }
 warn()    { echo -e "  ${YELLOW}⚠ ${1}${RESET}"; }
 error()   { echo -e "\n  ${RED}✗ ERROR: ${1}${RESET}\n"; exit 1; }
-hr()      { echo -e "${DIM}──────────────────────────────────────────────────────${RESET}"; }
 
 ask() {
     local var="$1" prompt="$2" default="${3:-}"
     if [[ -n "$default" ]]; then
-        read -rp "  ${CYAN}?${RESET} ${prompt} [${default}]: " input
+        read -rp "  $(echo -e "${CYAN}?${RESET}") ${prompt} ${DIM}[${default}]${RESET}: " input
         printf -v "$var" '%s' "${input:-$default}"
     else
-        read -rp "  ${CYAN}?${RESET} ${prompt}: " input
+        read -rp "  $(echo -e "${CYAN}?${RESET}") ${prompt}: " input
         while [[ -z "$input" ]]; do
             echo -e "  ${RED}This field is required.${RESET}"
-            read -rp "  ${CYAN}?${RESET} ${prompt}: " input
+            read -rp "  $(echo -e "${CYAN}?${RESET}") ${prompt}: " input
         done
         printf -v "$var" '%s' "$input"
     fi
@@ -47,46 +46,23 @@ ask() {
 
 ask_secret() {
     local var="$1" prompt="$2"
-    read -srp "  ${CYAN}?${RESET} ${prompt}: " input; echo
+    read -srp "  $(echo -e "${CYAN}?${RESET}") ${prompt}: " input
+    echo
     while [[ -z "$input" ]]; do
         echo -e "  ${RED}This field is required.${RESET}"
-        read -srp "  ${CYAN}?${RESET} ${prompt}: " input; echo
+        read -srp "  $(echo -e "${CYAN}?${RESET}") ${prompt}: " input
+        echo
     done
     printf -v "$var" '%s' "$input"
 }
 
-env_set() {
-    local key="$1" val="$2"
-    local esc
-    esc=$(printf '%s\n' "$val" | sed 's/[\/&]/\\&/g')
-    if grep -q "^${key}=" .env 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${esc}|" .env
-    else
-        echo "${key}=${esc}" >> .env
-    fi
-}
-
-# ── must run as root ──────────────────────────────────────────
-if [[ "$EUID" -ne 0 ]]; then
-    error "Please run as root: sudo bash install.sh"
-fi
-
-# ── detect OS ─────────────────────────────────────────────────
-if [[ -f /etc/os-release ]]; then
-    source /etc/os-release
-    OS_ID="${ID:-unknown}"
-else
-    error "Cannot detect OS. Only Ubuntu/Debian are supported."
-fi
-
-if [[ "$OS_ID" != "ubuntu" && "$OS_ID" != "debian" ]]; then
-    error "Only Ubuntu and Debian are supported. Detected: $OS_ID"
-fi
+hr() { echo -e "${DIM}──────────────────────────────────────────────────────${RESET}"; }
 
 # ── banner ────────────────────────────────────────────────────
 clear
 echo -e "${WHITE}"
 cat << 'BANNER'
+
   ██╗  ██╗██████╗  ██████╗ ██╗  ██╗██╗   ██╗
   ██║ ██╔╝██╔══██╗██╔═══██╗╚██╗██╔╝╚██╗ ██╔╝
   █████╔╝ ██████╔╝██║   ██║ ╚███╔╝  ╚████╔╝
@@ -94,231 +70,185 @@ cat << 'BANNER'
   ██║  ██╗██║  ██║╚██████╔╝██╔╝ ██╗   ██║
   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
         Panel Installer · github.com/ElXora/kroxy-new
+
 BANNER
 echo -e "${RESET}"
 hr
-
-echo -e "  This script will automatically install Kroxy Panel."
+echo -e "  This script will:"
+echo -e "  ${DIM}• Clone the repo from GitHub${RESET}"
+echo -e "  ${DIM}• Install Composer & npm dependencies${RESET}"
+echo -e "  ${DIM}• Set up your .env${RESET}"
+echo -e "  ${DIM}• Run migrations & build the frontend${RESET}"
+echo -e "  ${DIM}• Create your first admin user${RESET}"
 hr
 echo
 read -rp "  Press ENTER to begin, or Ctrl+C to cancel..."
 
-# ── collect configuration ─────────────────────────────────────
+# ── 1 · collect config ────────────────────────────────────────
 echo
-echo -e "${BOLD}Configuration${RESET}"
+echo -e "${BOLD}Basic Configuration${RESET}"
 echo
 
-ask APP_NAME  "Panel name" "Kroxy"
-ask APP_URL   "Panel URL (e.g. https://panel.example.com)"
-ask APP_TZ    "Timezone (e.g. UTC, Europe/London)" "UTC"
+ask       APP_NAME     "Panel name"                       "Kroxy"
+ask       APP_URL      "Panel URL (e.g. https://panel.example.com)"
+ask       APP_ENV      "Environment"                      "production"
+ask       APP_TIMEZONE "Timezone (e.g. UTC, America/New_York)"  "UTC"
 
 echo
 echo -e "${BOLD}Admin account${RESET}"
-ask ADMIN_FIRST    "First name"
-ask ADMIN_LAST     "Last name"
-ask ADMIN_EMAIL    "Email"
-ask ADMIN_USERNAME "Username" "admin"
-ask_secret ADMIN_PASS  "Password"
-ask_secret ADMIN_PASS2 "Confirm password"
+ask        ADMIN_FIRST    "Admin first name"
+ask        ADMIN_LAST     "Admin last name"
+ask        ADMIN_EMAIL    "Admin email"
+ask        ADMIN_USERNAME "Admin username"  "admin"
+ask_secret ADMIN_PASS     "Admin password"
 
-while [[ "$ADMIN_PASS" != "$ADMIN_PASS2" ]]; do
+# confirm password
+ask_secret ADMIN_PASS_CONFIRM "Confirm admin password"
+while [[ "$ADMIN_PASS" != "$ADMIN_PASS_CONFIRM" ]]; do
     echo -e "  ${RED}Passwords do not match. Try again.${RESET}"
-    ask_secret ADMIN_PASS  "Password"
-    ask_secret ADMIN_PASS2 "Confirm password"
+    ask_secret ADMIN_PASS         "Admin password"
+    ask_secret ADMIN_PASS_CONFIRM "Confirm admin password"
 done
 
-# Auto-generate credentials
-DB_NAME="kroxy"
-DB_USER="kroxy"
-DB_PASS="$(tr -dc 'A-Za-z0-9!#%^' </dev/urandom | head -c 24)"
-REDIS_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
-
-# ── Confirmation AFTER admin info ─────────────────────────────
 echo
 hr
-echo -e "  ${YELLOW}Installation Summary${RESET}"
-echo -e "  Panel name : ${APP_NAME}"
-echo -e "  Panel URL  : ${APP_URL}"
-echo -e "  Timezone   : ${APP_TZ}"
-echo -e "  Admin      : ${ADMIN_FIRST} ${ADMIN_LAST} <${ADMIN_EMAIL}> (${ADMIN_USERNAME})"
-echo -e "  ${DIM}Database and Redis credentials will be auto-generated.${RESET}"
+echo -e "  ${YELLOW}Review your config:${RESET}"
+echo -e "  App name  : ${APP_NAME}"
+echo -e "  App URL   : ${APP_URL}"
+echo -e "  Admin     : ${ADMIN_FIRST} ${ADMIN_LAST} <${ADMIN_EMAIL}> (${ADMIN_USERNAME})"
 hr
+read -rp "  Looks good? Press ENTER to install, or Ctrl+C to abort..."
 echo
 
-read -rp "  All information correct? Press ENTER to start installation or Ctrl+C to cancel..."
-echo
+# ── 2 · check dependencies ────────────────────────────────────
+step "Checking system dependencies"
+for cmd in php composer node npm git curl; do
+    if command -v "$cmd" &>/dev/null; then
+        success "$cmd found ($(command $cmd --version 2>&1 | head -1))"
+    else
+        error "$cmd is not installed. Please install it and re-run this script."
+    fi
+done
 
-# ── 1 · system update ─────────────────────────────────────────
-step "Updating system packages"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get upgrade -y -qq
-success "System updated"
+PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+NODE_VER=$(node -e 'process.stdout.write(process.version.slice(1))')
 
-# ── 2 · base dependencies ─────────────────────────────────────
-step "Installing base dependencies"
-apt-get install -y -qq curl wget git unzip zip tar \
-    software-properties-common apt-transport-https \
-    ca-certificates gnupg lsb-release
-success "Base dependencies installed"
-
-# ── 3 · PHP 8.3 ───────────────────────────────────────────────
-step "Installing PHP 8.3 and required extensions"
-if [[ "$OS_ID" == "ubuntu" ]]; then
-    add-apt-repository -y ppa:ondrej/php >/dev/null 2>&1
+if awk "BEGIN{exit !($PHP_VER >= 8.1)}"; then
+    success "PHP $PHP_VER is compatible"
 else
-    curl -sSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /usr/share/keyrings/sury-php.gpg
-    echo "deb [signed-by=/usr/share/keyrings/sury-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" \
-        > /etc/apt/sources.list.d/sury-php.list
+    error "PHP 8.1+ required. You have PHP $PHP_VER."
 fi
 
-apt-get update -qq
-apt-get install -y -qq php8.3 php8.3-cli php8.3-fpm php8.3-common \
-    php8.3-mysql php8.3-mbstring php8.3-bcmath php8.3-xml \
-    php8.3-curl php8.3-zip php8.3-gd php8.3-tokenizer \
-    php8.3-readline php8.3-redis php8.3-intl
-success "PHP 8.3 installed ($(php8.3 -r 'echo PHP_VERSION;'))"
+if awk "BEGIN{exit !(${NODE_VER%%.*} >= 16)}"; then
+    success "Node $NODE_VER is compatible"
+else
+    warn "Node 16+ recommended. You have Node $NODE_VER."
+fi
 
-# ── 4 · Composer ──────────────────────────────────────────────
-step "Installing Composer"
-curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --quiet
-success "Composer installed"
+# ── 3 · clone ────────────────────────────────────────────────
+step "Cloning repository"
 
-# ── 5 · Node 20 ───────────────────────────────────────────────
-step "Installing Node.js 20 and npm"
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
-apt-get install -y -qq nodejs
-success "Node.js 20 installed"
-
-# ── 6 · MySQL 8 ───────────────────────────────────────────────
-step "Installing and configuring MySQL 8"
-apt-get install -y -qq mysql-server
-systemctl enable mysql >/dev/null 2>&1
-systemctl start mysql
-
-mysql -u root << MYSQL_SETUP
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '';
-DELETE FROM mysql.user WHERE User='';
-DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost','127.0.0.1','::1');
-DROP DATABASE IF EXISTS test;
-DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
-CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
-GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
-FLUSH PRIVILEGES;
-MYSQL_SETUP
-success "MySQL 8 installed"
-
-# ── 7 · Redis ─────────────────────────────────────────────────
-step "Installing and configuring Redis"
-apt-get install -y -qq redis-server
-sed -i "s/^# requirepass .*/requirepass ${REDIS_PASS}/" /etc/redis/redis.conf
-sed -i "s/^requirepass .*/requirepass ${REDIS_PASS}/" /etc/redis/redis.conf
-sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf
-systemctl enable redis-server >/dev/null 2>&1
-systemctl restart redis-server
-success "Redis installed and secured"
-
-# ── 8 · Nginx ─────────────────────────────────────────────────
-step "Installing and configuring Nginx"
-apt-get install -y -qq nginx
-
-APP_DOMAIN="${APP_URL#https://}"
-APP_DOMAIN="${APP_DOMAIN#http://}"
-APP_DOMAIN="${APP_DOMAIN%%/*}"
-
-cat > /etc/nginx/sites-available/kroxy << NGINX_CONF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${APP_DOMAIN};
-    root /var/www/kroxy/public;
-    index index.php;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \.php$ {
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
-        fastcgi_index index.php;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_read_timeout 300;
-    }
-
-    location ~ /\.ht {
-        deny all;
-    }
-
-    client_max_body_size 100m;
-}
-NGINX_CONF
-
-ln -sf /etc/nginx/sites-available/kroxy /etc/nginx/sites-enabled/kroxy
-rm -f /etc/nginx/sites-enabled/default
-nginx -t >/dev/null 2>&1 && systemctl restart nginx
-systemctl enable nginx >/dev/null 2>&1
-success "Nginx configured"
-
-# ── 9 · Clone ─────────────────────────────────────────────────
-step "Cloning Kroxy Panel"
 INSTALL_DIR="/var/www/kroxy"
+
 if [[ -d "$INSTALL_DIR" ]]; then
-    warn "Directory exists, removing..."
-    rm -rf "$INSTALL_DIR"
+    warn "Directory $INSTALL_DIR already exists."
+    read -rp "  Overwrite? [y/N]: " ow
+    if [[ "${ow,,}" == "y" ]]; then
+        rm -rf "$INSTALL_DIR"
+    else
+        error "Aborted. Choose a different install dir or remove the existing one."
+    fi
 fi
-git clone https://github.com/ElXora/kroxy-new "$INSTALL_DIR" --quiet
+
+git clone https://github.com/ElXora/kroxy-new "$INSTALL_DIR"
 cd "$INSTALL_DIR"
-success "Repository cloned"
+success "Cloned to $INSTALL_DIR"
 
-# ── 10 · Composer ─────────────────────────────────────────────
-step "Installing PHP dependencies"
-composer install --no-dev --optimize-autoloader --no-interaction --quiet
-success "Composer dependencies installed"
+# ── 4 · composer ──────────────────────────────────────────────
+step "Installing PHP dependencies (Composer)"
+composer install --no-dev --optimize-autoloader --no-interaction
+success "Composer packages installed"
 
-# ── 11 · .env ─────────────────────────────────────────────────
-step "Configuring .env file"
+# ── 5 · .env setup ────────────────────────────────────────────
+step "Generating .env file"
+
 cp .env.example .env
 
-env_set APP_NAME        "${APP_NAME}"
-env_set APP_ENV         "production"
-env_set APP_URL         "${APP_URL}"
-env_set APP_TIMEZONE    "${APP_TZ}"
+# helper: set or add a key in .env
+env_set() {
+    local key="$1" val="$2"
+    local escaped_val
+    escaped_val=$(printf '%s\n' "$val" | sed 's/[\/&]/\\&/g')
+    if grep -q "^${key}=" .env; then
+        sed -i "s|^${key}=.*|${key}=${escaped_val}|" .env
+    else
+        echo "${key}=${escaped_val}" >> .env
+    fi
+}
+
+env_set APP_NAME        "\"${APP_NAME}\""
+env_set APP_ENV         "$APP_ENV"
+env_set APP_URL         "$APP_URL"
+env_set APP_TIMEZONE    "$APP_TIMEZONE"
 env_set APP_DEBUG       "false"
+
+# === Database (defaults) ===
 env_set DB_CONNECTION   "mysql"
 env_set DB_HOST         "127.0.0.1"
 env_set DB_PORT         "3306"
-env_set DB_DATABASE     "${DB_NAME}"
-env_set DB_USERNAME     "${DB_USER}"
-env_set DB_PASSWORD     "${DB_PASS}"
+env_set DB_DATABASE     "kroxy"
+env_set DB_USERNAME     "kroxy"
+env_set DB_PASSWORD     "kroxy_password"   # ← Change this after install!
+
+# === Redis (defaults) ===
 env_set REDIS_HOST      "127.0.0.1"
 env_set REDIS_PORT      "6379"
-env_set REDIS_PASSWORD  "${REDIS_PASS}"
+env_set REDIS_PASSWORD  "null"
+
 env_set CACHE_DRIVER    "redis"
 env_set SESSION_DRIVER  "redis"
 env_set QUEUE_CONNECTION "redis"
-env_set MAIL_MAILER     "log"
-env_set MAIL_FROM_ADDRESS "no-reply@${APP_DOMAIN}"
-env_set MAIL_FROM_NAME  "${APP_NAME}"
 
-php artisan key:generate --force --quiet
-success ".env configured"
+# === Mail (defaults - disabled by default) ===
+env_set MAIL_MAILER     "log"        # Use "log" so it doesn't try to send real emails
+env_set MAIL_HOST       "smtp.mailtrap.io"
+env_set MAIL_PORT       "2525"
+env_set MAIL_USERNAME   ""
+env_set MAIL_PASSWORD   ""
+env_set MAIL_ENCRYPTION "tls"
+env_set MAIL_FROM_ADDRESS "no-reply@${APP_URL#https://}"
+env_set MAIL_FROM_NAME  "\"${APP_NAME}\""
 
-# ── 12 · Migrate ──────────────────────────────────────────────
-step "Setting permissions and running migrations"
-chown -R www-data:www-data "$INSTALL_DIR"
+success ".env written (DB/Redis/Mail use defaults)"
+
+# ── 6 · app key ───────────────────────────────────────────────
+step "Generating application key"
+php artisan key:generate --force
+success "App key generated"
+
+# ── 7 · storage permissions ───────────────────────────────────
+step "Setting storage permissions"
 chmod -R 755 storage bootstrap/cache
-php artisan migrate --seed --force --quiet
-success "Migrations completed"
+chown -R www-data:www-data storage bootstrap/cache 2>/dev/null \
+    && success "Ownership set to www-data" \
+    || warn "Could not chown to www-data (may need manual fix)"
 
-# ── 13 · Frontend ─────────────────────────────────────────────
-step "Building frontend"
-npm install --silent
-npm run build --silent
+# ── 8 · database ──────────────────────────────────────────────
+step "Running database migrations"
+info "Make sure your database '${DB_DATABASE}' exists and user '${DB_USERNAME}' has access."
+php artisan migrate --seed --force
+success "Database migrated and seeded"
+
+# ── 9 · npm build ─────────────────────────────────────────────
+step "Installing Node dependencies"
+npm install
+success "npm packages installed"
+
+step "Building frontend assets"
+npm run build
 success "Frontend built"
 
-# ── 14 · Admin + Queue ────────────────────────────────────────
+# ── 10 · create admin user ────────────────────────────────────
 step "Creating admin user"
 php artisan p:user:make \
     --email="$ADMIN_EMAIL" \
@@ -327,39 +257,50 @@ php artisan p:user:make \
     --name-last="$ADMIN_LAST" \
     --password="$ADMIN_PASS" \
     --admin=1
+success "Admin user created: ${ADMIN_FIRST} ${ADMIN_LAST} <${ADMIN_EMAIL}>"
 
-# Queue service
-cat > /etc/systemd/system/kroxy-queue.service << SERVICE
+# ── 11 · queue worker hint ────────────────────────────────────
+step "Queue worker setup"
+# (same as before)
+cat << 'SERVICE' > /tmp/kroxy-queue.service
 [Unit]
 Description=Kroxy Panel Queue Worker
-After=network.target mysql.service redis-server.service
+After=network.target
 
 [Service]
 User=www-data
 Group=www-data
 Restart=always
-RestartSec=5
 ExecStart=/usr/bin/php /var/www/kroxy/artisan queue:work --queue=high,standard,low --sleep=3 --tries=3 --max-time=3600
 
 [Install]
 WantedBy=multi-user.target
 SERVICE
 
-systemctl daemon-reload
-systemctl enable --now kroxy-queue.service >/dev/null 2>&1
-success "Admin user created & queue worker started"
+if [[ -d /etc/systemd/system ]]; then
+    cp /tmp/kroxy-queue.service /etc/systemd/system/kroxy-queue.service
+    systemctl daemon-reload
+    systemctl enable kroxy-queue.service
+    systemctl start  kroxy-queue.service
+    success "Queue worker service installed and started"
+else
+    warn "systemd not found. Start manually: php ${INSTALL_DIR}/artisan queue:work"
+fi
 
-# ── Finish ────────────────────────────────────────────────────
+# ── 12 · done ─────────────────────────────────────────────────
+step "Installation complete"
+
 echo
-echo -e "${WHITE}╔════════════════════════════════════════════════════╗${RESET}"
-echo -e "${WHITE}║     Kroxy Panel installed successfully! 🎉        ║${RESET}"
-echo -e "${WHITE}╚════════════════════════════════════════════════════╝${RESET}"
+echo -e "${WHITE}╔════════════════════════════════════════════════╗${RESET}"
+echo -e "${WHITE}║          Kroxy Panel is ready!  🎉             ║${RESET}"
+echo -e "${WHITE}╚════════════════════════════════════════════════╝${RESET}"
 echo
 echo -e "  ${BOLD}Panel URL   :${RESET} ${APP_URL}"
-echo -e "  ${BOLD}Admin Email :${RESET} ${ADMIN_EMAIL}"
-echo -e "  ${BOLD}Admin User  :${RESET} ${ADMIN_USERNAME}"
+echo -e "  ${BOLD}Admin login :${RESET} ${ADMIN_EMAIL}"
+echo -e "  ${BOLD}Installed to:${RESET} ${INSTALL_DIR}"
 echo
-echo -e "  ${YELLOW}Next:${RESET} Run ${BOLD}certbot --nginx -d ${APP_DOMAIN}${RESET} for HTTPS"
+echo -e "  ${YELLOW}Important:${RESET}"
+echo -e "  • Update DB password in ${INSTALL_DIR}/.env"
+echo -e "  • Point your web server root to ${INSTALL_DIR}/public"
+echo -e "  • Set up SSL"
 echo
-
-exit 0
